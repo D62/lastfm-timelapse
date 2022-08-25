@@ -7,8 +7,15 @@ Display a bar chart race animation based on your last.fm scrobbles.
 ### Prerequisites
 
 * [Python >= 3.8](https://www.python.org/)
+* [ffmpeg](https://www.ffmpeg.org/download.html)
 * [lastfm-backup](https://github.com/D62/lastfm-backup)
 * last.fm history file generated with [lastfm-backup](https://github.com/D62/lastfm-backup)
+
+#### Installing ffmpeg
+
+In order to save animations as mp4 files, you must install [ffmpeg](https://www.ffmpeg.org/download.html), which allows for conversion to many different formats of video and audio. For macOS users, installation may be [easier using Homebrew](https://trac.ffmpeg.org/wiki/CompilationGuide/macOS#ffmpegthroughHomebrew).
+
+After installation, ensure that `ffmpeg` has been added to your path by going to your command line and entering `ffmepg -version`.
 
 ### Steps
 
@@ -42,6 +49,6 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-### How to use:
+## How to use:
 * Run `app.py`
 * Follow the instructions
