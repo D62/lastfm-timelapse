@@ -188,7 +188,7 @@ with st.form(key="Form"):
             # start generating the animation if date requirements are met
             progress_bar = st.progress(0) # initialize progress bar
 
-            with st.spinner("Downloading data from Last.fm..."):
+            with st.spinner("Fetching data from Last.fm..."):
                 df = get_data(username, start_date, end_date)
 
             with st.spinner("Preparing data frame..."):

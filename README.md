@@ -2,7 +2,11 @@
 
 Display a bar chart race animation based on your last.fm scrobbles.
 
-## Installation
+## How to use:
+* Open `https://lastfm-timelapse.streamlitapp.com/`
+* Follow the instructions
+
+## Local installation
 
 ### Prerequisites
 
@@ -47,6 +51,8 @@ python -m venv .env
 pip install -r requirements.txt
 ```
 
-## How to use:
-* Run `app.py`
-* Follow the instructions
+5. Run the app with Streamlit:
+
+```
+streamlit run app.py
+```
