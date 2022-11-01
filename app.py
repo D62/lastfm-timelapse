@@ -49,6 +49,14 @@ def get_data(username, start_date, end_date):
             st.error(response.text, icon="🚨")
             st.stop()
 
+        # check number of scrobbles and stop if >15000
+        limit = 15000
+        total = int(response.json()["recenttracks"]["@attr"]["total"])
+        if total > limit:
+            progress_bar.empty()
+            st.error(f"Too many scrobbles to process ({total}/{limit})", icon="🚨")
+            st.stop()
+
         # extract pagination info
         page = int(response.json()["recenttracks"]["@attr"]["page"])
         total_pages = int(response.json()["recenttracks"]["@attr"]["totalPages"])
