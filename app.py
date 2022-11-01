@@ -163,6 +163,7 @@ def bar_chart_race(table):
 
     video = base64.b64decode(html_str[start:end])
     st.video(video)
+    st.download_button("Download", video)
 
     # update progress bar
     percent_complete = 1
