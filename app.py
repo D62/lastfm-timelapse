@@ -125,6 +125,7 @@ def set_table(df):
 
 def create_bcr(table):
 
+    # bar chart race parameters
     html_str = bcr.bar_chart_race(
         table,
         n_bars=10,
@@ -146,9 +147,9 @@ def create_bcr(table):
         title=f"{username}'s scrobbles by artists",
     )
 
+    # generate the video file
     start = html_str.find('base64,')+len('base64,')
     end = html_str.find('">')
-
     video = base64.b64decode(html_str[start:end])
 
     # update progress bar
@@ -167,21 +168,22 @@ st.title("Last.fm Timelapse Generator")
 
 video = ""
 
+# input form
 with st.form(key="Form"):
 
     username = st.text_input("Enter Last.fm username")
 
     today = datetime.date.today()
-    tomorrow = today + datetime.timedelta(days=1)
+    yesterday = today - datetime.timedelta(days=1)
 
-    start_date = st.date_input("Enter start date", today)
-    end_date = st.date_input("Enter end date", tomorrow)
+    start_date = st.date_input("Enter start date", yesterday)
+    end_date = st.date_input("Enter end date", today)
 
 # check dates after click on "Generate"
 
     if st.form_submit_button(label="Generate"):
 
-        if start_date < end_date:
+        if start_date < end_date and start_date < today and end_date <= today:
 
             # start generating the animation if date requirements are met
             progress_bar = st.progress(0) # initialize progress bar
@@ -198,7 +200,7 @@ with st.form(key="Form"):
             progress_bar.empty()
 
         else:
-            st.error("Error: End date must fall after start date.", icon="🚨")
+            st.error("Date Error", icon="🚨")
 
 if len(video) !=0:
     output(video)
