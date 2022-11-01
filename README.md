@@ -51,7 +51,7 @@ python -m venv .env
 pip install -r requirements.txt
 ```
 
-5. Run the app with Streamlit:
+6. Run the app with Streamlit:
 
 ```
 streamlit run app.py
