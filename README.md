@@ -3,7 +3,7 @@
 Display a bar chart race animation based on your last.fm scrobbles.
 
 ## How to use:
-* Open `https://lastfm-timelapse.streamlitapp.com/`
+* Open https://lastfm-timelapse.streamlitapp.com/
 * Follow the instructions
 
 ## Local installation
