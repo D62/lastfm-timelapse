@@ -1,66 +1,100 @@
 import bar_chart_race as bcr
+import base64
 import datetime
 import json
-import os
+import requests
 import pandas as pd
+import streamlit as st
+import time
 
-# check input date format
-def format_check(date, fmt):
-    try: datetime.datetime.strptime(date, fmt)
-    except: return False
-    else: return True
+def lastfm_get(method, username, page):
 
-# input dates
-def input_date(date):
-    user_input = input(f"Enter {date} date in YYYY-mm-dd format: ")
-    if not format_check(user_input, '%Y-%m-%d'):
-        raise ValueError("❌ invalid date format!")
-    return user_input
+    # add API key and format to the payload
+    payload = {
+        "method": method,
+        "api_key": st.secrets["api_key"],
+        "user": username,
+        "format": "json"
+    }
 
-# check lastfm-backup path and files
-def path_check(dir):
-    if os.path.exists(dir):
-        print(f"✅ {dir} found")
+    if method == "user.getRecentTracks":
+        payload |= {
+        "from": 1665792000,
+        "limit": 200,
+        "page": page
+    }
+
+    # define headers and URL
+    headers = {"user-agent": "test"}
+    url = "https://ws.audioscrobbler.com/2.0/"
+
+    response = requests.get(url, headers=headers, params=payload)
+    return response
+
+def username_check(username):
+
+    # make the API call
+    response = lastfm_get("user.getInfo", username, 0)
+
+    # behavior when no username entered
+    if username == "":
+        st.error("No username entered", icon="🚨")
+        return False
+
+    # if we get an error, print the response and halt the loop
+    elif response.status_code != 200:
+        st.error(response.json()["message"], icon="🚨")
+        return False
+
+    # if user found    
     else:
-        print(f"❌ {dir} not found!")
-        exit()
+        #userpic = str(response.json()["user"]["image"][0]["#text"])
+        st.success("User " + response.json()["user"]["name"] + " found", icon="✅")
+        #st.image(userpic, caption=None, width=None, use_column_width=None, clamp=False, channels="RGB", output_format="auto")
+        return True
 
-if __name__ == "__main__":
+def get_data(username):
 
-    # enter start and end date
-    start_date = input_date("start")
-    end_date = input_date("end")
+    responses = []
+    page = 1
+    total_pages = 99999 # dummy number so the loop starts
 
-    # check if start date < end date
-    if start_date > end_date:
-        print(f"❌ start date cannot come after end date!")
-        exit()
+    while page <= total_pages:
 
-    # check lastfm-backup folder
-    lfb_path = os.path.abspath(__file__ + "/../../lastfm-backup/")
-    path_check(lfb_path)
+        # make the API call
+        response = lastfm_get("user.getRecentTracks", username, page)
 
-    # check config file
-    config_path = os.path.abspath(f"{lfb_path}/config.json")
-    path_check(config_path)
+        # if we get an error, print the response and halt the loop
+        if response.status_code != 200:
+            st.error(response.text, icon="🚨")
+            break
 
-    # get username from lastfm-backup config file
-    with open(f"{config_path}") as f:
-        config = json.loads(f.read())
-        username = config["username"]
+        # extract pagination info
+        page = int(response.json()["recenttracks"]["@attr"]["page"])
+        total_pages = int(response.json()["recenttracks"]["@attr"]["totalPages"])
 
-    # check JSON backup file
-    json_path = os.path.abspath(f"{lfb_path}/{username}.json")
-    path_check(json_path)
+        # append response
+        responses.append(response)
 
-    # load JSON backup
-    with open(f"{json_path}","r") as f:
-        data=json.loads(f.read())
-        print(f"✅ {username} data loaded")
+        # if it is not a cached result, sleep
+        if not getattr(response, "from_cache", False):
+            time.sleep(0.25)
+
+        # update progress bar
+        percent_complete = (page / total_pages) / 3
+        progress_bar.progress(percent_complete)
+
+        # increment the page number
+        page += 1
+
+    df = [json.loads(r.content.decode("utf-8")) for r in responses]
+    return df
+
+def prepare_table(df):
 
     # normalize data frame
     df_normalized = pd.json_normalize(
-        data,
+        df,
         record_path=["recenttracks", "track"],
         errors="ignore",
     )
@@ -70,9 +104,13 @@ if __name__ == "__main__":
     df["date"] = pd.to_datetime(df["date.uts"],unit="s")
 
     # filter date frame
-    mask = (df["date"] >= start_date) & (df['date'] <= end_date)
-    df = df.loc[mask]
+    #mask = (df["date"] >= start_date) & (df["date"] <= end_date)
+    #df = df.loc[mask]
     df["date"] = df["date"].dt.date
+
+    # get min and max dates
+    min_date = df["date"].min()
+    max_date = df["date"].max()
 
     # pivot data frame
     table = pd.pivot_table(
@@ -85,51 +123,102 @@ if __name__ == "__main__":
     )
 
     # fill empty dates
-    idx = pd.date_range(start_date, end_date)
+    idx = pd.date_range(min_date, max_date)
     table = table.reindex(idx, fill_value=0)
 
     # cumulate daily scrobbles
     table = table.cumsum(axis = 0)
 
-    print("✅ data frame ready")
+    # update progress bar
+    percent_complete = 2 / 3
+    progress_bar.progress(percent_complete)
 
-    # create output folder if does not exist
-    dir = os.path.abspath(__file__ + "/../videos/")
-    if not os.path.exists(dir):
-        os.mkdir(dir)
+    return table
 
-    # build animation
-    bcr.bar_chart_race(
+def bar_chart_race(table):
+
+    html_str = bcr.bar_chart_race(
         table,
-        filename=f"{dir}/{username}_{start_date}_{end_date}.mp4",
-        orientation="h",
-        sort="desc",
         n_bars=10,
         fixed_order=False,
         fixed_max=True,
-        steps_per_period=10,
-        interpolate_period=False,
-        label_bars=True,
-        bar_size=.95,
-        period_label={"x": .99, "y": .25, "ha": "right", "va": "center"},
-        period_summary_func=lambda v, r: {"x": .99, "y": .18,
-                                        "s": f"Total scrobbles: {v.nlargest(6).sum():,.0f}",
-                                        "ha": "right", "size": 8, "family": "Courier New"},
-        perpendicular_bar_func="median",
-        period_length=500,
-        figsize=(5, 3),
-        dpi=144,
-        cmap="dark12",
+        period_label={
+            "x": .99,
+            "y": .25,
+            "ha": "right",
+            "va": "center"
+        },
+        period_summary_func=lambda v, r:{
+            "x": .99,
+            "y": .18,
+            "s": f"Total: {v.nlargest(6).sum():,.0f}",
+            "ha": "right",
+            "size": 8
+        },
         title=f"{username}'s scrobbles by artists",
-        title_size="",
-        bar_label_size=7,
-        tick_label_size=7,
-        shared_fontdict={"family" : "Helvetica", "color" : ".1"},
-        scale="linear",
-        writer=None,
-        fig=None,
-        bar_kwargs={"alpha": .7},
-        filter_column_colors=False
-    )  
+    )
 
-    print(f"✅ ANIMATION READY\nVideo located at {dir}/{username}_{start_date}_{end_date}.mp4")
+    start = html_str.find('base64,')+len('base64,')
+    end = html_str.find('">')
+
+    video = base64.b64decode(html_str[start:end])
+    st.video(video)
+
+    # update progress bar
+    percent_complete = 1
+    progress_bar.progress(percent_complete)
+
+# Streamlit page title
+st.title("Last.fm Timelapse Generator")
+
+# username input
+
+st.header("1) Enter Last.fm username")
+
+with st.form(key="username"):
+
+    username = st.text_input("Enter Last.fm username", label_visibility="collapsed")
+
+    # check username after click on "Submit"
+    if st.form_submit_button(label="Submit"):
+        if not username_check(username):
+            username = ""
+
+# date range input
+
+st.header("2) Enter date range")
+
+with st.form(key="daterange"):
+
+    today = datetime.date.today()
+    tomorrow = today + datetime.timedelta(days=1)
+
+    start_date = st.date_input("Start date", today, disabled=username=="")
+    end_date = st.date_input("End date", tomorrow, disabled=username=="")
+
+# check dates after click on "Submit"
+
+    if st.form_submit_button(label="Submit", disabled=username==""):
+
+        if start_date < end_date:
+            st.success("Start date: `%s`\n\nEnd date:`%s`" % (start_date, end_date), icon="✅")
+
+        else:
+            st.error("Error: End date must fall after start date.", icon="🚨")
+
+st.header("3) Generate timelapse animation")
+
+if st.button(label="Run", disabled=username==""):
+
+    progress_bar = st.progress(0) # initialize progress bar
+
+    with st.spinner("Downloading data from Last.fm..."):
+        df = get_data(username)
+
+    with st.spinner("Preparing data frame..."):
+        table = prepare_table(df)
+    
+    with st.spinner("Creating animation..."):
+        bar_chart_race(table)
+
+    progress_bar.empty()
