@@ -8,8 +8,6 @@ Display a bar chart race animation based on your last.fm scrobbles.
 
 * [Python >= 3.8](https://www.python.org/)
 * [ffmpeg](https://www.ffmpeg.org/download.html)
-* [lastfm-backup](https://github.com/D62/lastfm-backup)
-* last.fm history file generated with [lastfm-backup](https://github.com/D62/lastfm-backup)
 
 #### Installing ffmpeg
 
@@ -34,13 +32,13 @@ cd lastfm-timelapse
 3. Create a new Python virtual environment:
 
 ```
-python -m venv .venv
+python -m venv .env
 ```
 
 4. Activate the environment:
 
 ```bash
-.venv/bin/activate
+.env/bin/activate
 ```
 
 5. Install the requirements:
