@@ -7,19 +7,16 @@ import pandas as pd
 import streamlit as st
 import time
 
-def lastfm_get(method, username, page):
+def lastfm_get(username, page, uts_start, uts_end):
 
     # add API key and format to the payload
     payload = {
-        "method": method,
+        "method": "user.getRecentTracks",
         "api_key": st.secrets["api_key"],
         "user": username,
-        "format": "json"
-    }
-
-    if method == "user.getRecentTracks":
-        payload |= {
-        "from": 1665792000,
+        "format": "json",
+        "from": uts_start,
+        "to": uts_end,
         "limit": 200,
         "page": page
     }
@@ -31,29 +28,11 @@ def lastfm_get(method, username, page):
     response = requests.get(url, headers=headers, params=payload)
     return response
 
-def username_check(username):
+def get_data(username, start_date, end_date):
 
-    # make the API call
-    response = lastfm_get("user.getInfo", username, 0)
-
-    # behavior when no username entered
-    if username == "":
-        st.error("No username entered", icon="🚨")
-        return False
-
-    # if we get an error, print the response and halt the loop
-    elif response.status_code != 200:
-        st.error(response.json()["message"], icon="🚨")
-        return False
-
-    # if user found    
-    else:
-        #userpic = str(response.json()["user"]["image"][0]["#text"])
-        st.success("User " + response.json()["user"]["name"] + " found", icon="✅")
-        #st.image(userpic, caption=None, width=None, use_column_width=None, clamp=False, channels="RGB", output_format="auto")
-        return True
-
-def get_data(username):
+    # convert start and end dates to Unix timestamps
+    uts_start = int(time.mktime(start_date.timetuple()))
+    uts_end = int(time.mktime(end_date.timetuple()))
 
     responses = []
     page = 1
@@ -62,12 +41,13 @@ def get_data(username):
     while page <= total_pages:
 
         # make the API call
-        response = lastfm_get("user.getRecentTracks", username, page)
+        response = lastfm_get(username, page, uts_start, uts_end)
 
         # if we get an error, print the response and halt the loop
         if response.status_code != 200:
+            progress_bar.empty()
             st.error(response.text, icon="🚨")
-            break
+            st.stop()
 
         # extract pagination info
         page = int(response.json()["recenttracks"]["@attr"]["page"])
@@ -90,7 +70,7 @@ def get_data(username):
     df = [json.loads(r.content.decode("utf-8")) for r in responses]
     return df
 
-def prepare_table(df):
+def set_table(df):
 
     # normalize data frame
     df_normalized = pd.json_normalize(
@@ -135,7 +115,7 @@ def prepare_table(df):
 
     return table
 
-def bar_chart_race(table):
+def create_bcr(table):
 
     html_str = bcr.bar_chart_race(
         table,
@@ -162,64 +142,55 @@ def bar_chart_race(table):
     end = html_str.find('">')
 
     video = base64.b64decode(html_str[start:end])
-    st.video(video)
-    st.download_button("Download", video)
 
     # update progress bar
     percent_complete = 1
     progress_bar.progress(percent_complete)
 
+    return video
+
+def output(video):
+
+    st.video(video) # display video in streamlit
+    st.download_button("Download", video) # download link
+
 # Streamlit page title
 st.title("Last.fm Timelapse Generator")
 
-# username input
+video = ""
 
-st.header("1) Enter Last.fm username")
+with st.form(key="Form"):
 
-with st.form(key="username"):
-
-    username = st.text_input("Enter Last.fm username", label_visibility="collapsed")
-
-    # check username after click on "Submit"
-    if st.form_submit_button(label="Submit"):
-        if not username_check(username):
-            username = ""
-
-# date range input
-
-st.header("2) Enter date range")
-
-with st.form(key="daterange"):
+    username = st.text_input("Enter Last.fm username")
 
     today = datetime.date.today()
     tomorrow = today + datetime.timedelta(days=1)
 
-    start_date = st.date_input("Start date", today, disabled=username=="")
-    end_date = st.date_input("End date", tomorrow, disabled=username=="")
+    start_date = st.date_input("Enter start date", today)
+    end_date = st.date_input("Enter end date", tomorrow)
 
-# check dates after click on "Submit"
+# check dates after click on "Generate"
 
-    if st.form_submit_button(label="Submit", disabled=username==""):
+    if st.form_submit_button(label="Generate"):
 
         if start_date < end_date:
-            st.success("Start date: `%s`\n\nEnd date:`%s`" % (start_date, end_date), icon="✅")
+
+            # start generating the animation if date requirements are met
+            progress_bar = st.progress(0) # initialize progress bar
+
+            with st.spinner("Downloading data from Last.fm..."):
+                df = get_data(username, start_date, end_date)
+
+            with st.spinner("Preparing data frame..."):
+                table = set_table(df)
+            
+            with st.spinner("Creating animation..."):
+                video = create_bcr(table)
+
+            progress_bar.empty()
 
         else:
             st.error("Error: End date must fall after start date.", icon="🚨")
 
-st.header("3) Generate timelapse animation")
-
-if st.button(label="Run", disabled=username==""):
-
-    progress_bar = st.progress(0) # initialize progress bar
-
-    with st.spinner("Downloading data from Last.fm..."):
-        df = get_data(username)
-
-    with st.spinner("Preparing data frame..."):
-        table = prepare_table(df)
-    
-    with st.spinner("Creating animation..."):
-        bar_chart_race(table)
-
-    progress_bar.empty()
+if len(video) !=0:
+    output(video)
