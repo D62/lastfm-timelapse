@@ -118,10 +118,6 @@ def set_table(df):
     # cumulate daily scrobbles
     table = table.cumsum(axis = 0)
 
-    # update progress bar
-    percent_complete = 3 / 5
-    progress_bar.progress(percent_complete)
-
     return table
 
 def optimize_table(table):
@@ -134,10 +130,6 @@ def optimize_table(table):
 
     # replace zeros with last non-zero value for each column on multi-index dataframe
     table = table.mask(table == 0).ffill(downcast="infer").fillna(0).astype(int)
-
-    # update progress bar
-    percent_complete = 4 / 5
-    progress_bar.progress(percent_complete)
 
     return table
 
@@ -170,16 +162,16 @@ def create_bcr(table):
     end = html_str.find('">')
     video = base64.b64decode(html_str[start:end])
 
-    # update progress bar
-    percent_complete = 1
-    progress_bar.progress(percent_complete)
-
     return video
 
 def output(video, username, start_date, end_date):
 
     st.video(video) # display video in streamlit
     st.download_button("Download", video, f"{username}_{start_date}_{end_date}.mp4") # download link
+
+def update_bar(current_stage, max_stage):
+    percent_complete = current_stage / max_stage
+    progress_bar.progress(percent_complete)
 
 if __name__ == "__main__":
 
@@ -224,12 +216,15 @@ if __name__ == "__main__":
 
                 with st.spinner("Preparing data frame..."):
                     table = set_table(df)
+                    update_bar(3, 5)
 
                 with st.spinner("Optimizing data frame..."):
                     table = optimize_table(table)
+                    update_bar(4, 5)
                 
                 with st.spinner("Creating animation..."):
                     st.session_state["video"] = create_bcr(table)
+                    update_bar(5, 5)
 
                 progress_bar.empty()
 
