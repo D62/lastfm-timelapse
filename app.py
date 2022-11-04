@@ -158,15 +158,24 @@ def create_bcr(table):
 
     return video
 
-def output(video):
+def output(video, username, start_date, end_date):
 
     st.video(video) # display video in streamlit
-    st.download_button("Download", video) # download link
+    st.download_button("Download", video, f"{username}_{start_date}_{end_date}.mp4") # download link
 
-# Streamlit page title
-st.title("Last.fm Timelapse Generator")
+# Streamlit page config & title
+title = "Last.fm Timelapse Generator"
+st.set_page_config(
+    page_title=title,
+    page_icon=":headphones:",
+    menu_items={
+        "About": "https://github.com/D62/lastfm-timelapse"
+    }
+)
+st.title(title)
 
-video = ""
+if "video" not in st.session_state:
+    st.session_state["video"] = ""
 
 # input form
 with st.form(key="Form"):
@@ -195,12 +204,12 @@ with st.form(key="Form"):
                 table = set_table(df)
             
             with st.spinner("Creating animation..."):
-                video = create_bcr(table)
+                st.session_state["video"] = create_bcr(table)
 
             progress_bar.empty()
 
         else:
             st.error("Date Error", icon="🚨")
 
-if len(video) !=0:
-    output(video)
+if len(st.session_state["video"]) !=0:
+    output(st.session_state["video"], username, start_date, end_date)
