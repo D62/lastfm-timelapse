@@ -70,7 +70,7 @@ def get_data(api_key, username, start_date, end_date):
             time.sleep(0.25)
 
         # update progress bar
-        percent_complete = (page / total_pages) / 3
+        percent_complete = (page / total_pages) / 2
         progress_bar.progress(percent_complete)
 
         # increment the page number
@@ -119,7 +119,24 @@ def set_table(df):
     table = table.cumsum(axis = 0)
 
     # update progress bar
-    percent_complete = 2 / 3
+    percent_complete = 3 / 5
+    progress_bar.progress(percent_complete)
+
+    return table
+
+def optimize_table(table):
+
+    # keep only top 15 columns per rows and set others to 0
+    table = table.mask(table.rank(axis=1, method='min', ascending=False).gt(15), 0)
+
+    # drop all columns where all values are zero 
+    table = table.loc[:, table.any()]
+
+    # replace zeros with last non-zero value for each column on multi-index dataframe
+    table = table.mask(table == 0).ffill(downcast="infer").fillna(0).astype(int)
+
+    # update progress bar
+    percent_complete = 4 / 5
     progress_bar.progress(percent_complete)
 
     return table
@@ -164,55 +181,60 @@ def output(video, username, start_date, end_date):
     st.video(video) # display video in streamlit
     st.download_button("Download", video, f"{username}_{start_date}_{end_date}.mp4") # download link
 
-# Streamlit page config & title
-title = "Last.fm Timelapse Generator"
-st.set_page_config(
-    page_title=title,
-    page_icon=":headphones:",
-    menu_items={
-        "About": "https://github.com/D62/lastfm-timelapse"
-    }
-)
-st.title(title)
+if __name__ == "__main__":
 
-api_key = st.secrets["api_key"]
+    # Streamlit page config & title
+    title = "Last.fm Timelapse Generator"
+    st.set_page_config(
+        page_title=title,
+        page_icon=":headphones:",
+        menu_items={
+            "About": "https://github.com/D62/lastfm-timelapse"
+        }
+    )
+    st.title(title)
 
-if "video" not in st.session_state:
-    st.session_state["video"] = ""
+    api_key = st.secrets["api_key"]
 
-# input form
-with st.form(key="Form"):
+    if "video" not in st.session_state:
+        st.session_state["video"] = ""
 
-    username = st.text_input("Enter Last.fm username")
+    # input form
+    with st.form(key="Form"):
 
-    today = datetime.date.today()
-    yesterday = today - datetime.timedelta(days=1)
+        username = st.text_input("Enter Last.fm username")
 
-    start_date = st.date_input("Enter start date", yesterday)
-    end_date = st.date_input("Enter end date", today)
+        today = datetime.date.today()
+        yesterday = today - datetime.timedelta(days=1)
 
-# check dates after click on "Generate"
+        start_date = st.date_input("Enter start date", yesterday)
+        end_date = st.date_input("Enter end date", today)
 
-    if st.form_submit_button(label="Generate"):
+    # check dates after click on "Generate"
 
-        if start_date < end_date and start_date < today and end_date <= today:
+        if st.form_submit_button(label="Generate"):
 
-            # start generating the animation if date requirements are met
-            progress_bar = st.progress(0) # initialize progress bar
+            if start_date < end_date and start_date < today and end_date <= today:
 
-            with st.spinner("Fetching data from Last.fm..."):
-                df = get_data(api_key, username, start_date, end_date)
+                # start generating the animation if date requirements are met
+                progress_bar = st.progress(0) # initialize progress bar
 
-            with st.spinner("Preparing data frame..."):
-                table = set_table(df)
-            
-            with st.spinner("Creating animation..."):
-                st.session_state["video"] = create_bcr(table)
+                with st.spinner("Fetching data from Last.fm..."):
+                    df = get_data(api_key, username, start_date, end_date)
 
-            progress_bar.empty()
+                with st.spinner("Preparing data frame..."):
+                    table = set_table(df)
 
-        else:
-            st.error("Date Error", icon="🚨")
+                with st.spinner("Optimizing data frame..."):
+                    table = optimize_table(table)
+                
+                with st.spinner("Creating animation..."):
+                    st.session_state["video"] = create_bcr(table)
 
-if len(st.session_state["video"]) !=0:
-    output(st.session_state["video"], username, start_date, end_date)
+                progress_bar.empty()
+
+            else:
+                st.error("Date Error", icon="🚨")
+
+    if len(st.session_state["video"]) !=0:
+        output(st.session_state["video"], username, start_date, end_date)
