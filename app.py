@@ -7,12 +7,12 @@ import pandas as pd
 import streamlit as st
 import time
 
-def lastfm_get(username, page, uts_start, uts_end):
+def lastfm_get(api_key, username, page, uts_start, uts_end):
 
     # add API key and format to the payload
     payload = {
         "method": "user.getRecentTracks",
-        "api_key": st.secrets["api_key"],
+        "api_key": api_key,
         "user": username,
         "format": "json",
         "from": uts_start,
@@ -28,7 +28,8 @@ def lastfm_get(username, page, uts_start, uts_end):
     response = requests.get(url, headers=headers, params=payload)
     return response
 
-def get_data(username, start_date, end_date):
+@st.cache(show_spinner=False)
+def get_data(api_key, username, start_date, end_date):
 
     # convert start and end dates to Unix timestamps
     uts_start = int(time.mktime(start_date.timetuple()))
@@ -41,7 +42,7 @@ def get_data(username, start_date, end_date):
     while page <= total_pages:
 
         # make the API call
-        response = lastfm_get(username, page, uts_start, uts_end)
+        response = lastfm_get(api_key, username, page, uts_start, uts_end)
 
         # if we get an error, print the response and halt the loop
         if response.status_code != 200:
@@ -174,6 +175,8 @@ st.set_page_config(
 )
 st.title(title)
 
+api_key = st.secrets["api_key"]
+
 if "video" not in st.session_state:
     st.session_state["video"] = ""
 
@@ -198,7 +201,7 @@ with st.form(key="Form"):
             progress_bar = st.progress(0) # initialize progress bar
 
             with st.spinner("Fetching data from Last.fm..."):
-                df = get_data(username, start_date, end_date)
+                df = get_data(api_key, username, start_date, end_date)
 
             with st.spinner("Preparing data frame..."):
                 table = set_table(df)
