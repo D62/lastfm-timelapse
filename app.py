@@ -79,7 +79,7 @@ def get_data(api_key, username, start_date, end_date):
     df = [json.loads(r.content.decode("utf-8")) for r in responses]
     return df
 
-def set_table(df):
+def set_table(df, chart_type):
 
     # normalize data frame
     df_normalized = pd.json_normalize(
@@ -87,7 +87,15 @@ def set_table(df):
         record_path=["recenttracks", "track"],
         errors="ignore",
     )
-    df = df_normalized[["date.uts", "artist.#text"]]
+
+    if chart_type == "Artists":
+        df_normalized["content"] = df_normalized["artist.#text"]
+    elif chart_type == "Albums":
+        df_normalized["content"] = df_normalized[["artist.#text", "album.#text"]].agg("\n".join, axis=1)
+    elif chart_type == "Tracks":
+        df_normalized["content"] = df_normalized[["artist.#text", "name"]].agg("\n".join, axis=1)
+
+    df = df_normalized[["date.uts", "content"]]
 
     # convert date format
     df["date"] = pd.to_datetime(df["date.uts"],unit="s")
@@ -104,7 +112,7 @@ def set_table(df):
         df, 
         values="date.uts",
         index=["date"],
-        columns=["artist.#text"],
+        columns=["content"],
         aggfunc="count",
         fill_value=0
     )
@@ -131,7 +139,7 @@ def optimize_table(table):
 
     return table
 
-def create_bcr(table):
+def create_bcr(table, chart_type):
 
     # bar chart race parameters
     html_str = bcr.bar_chart_race(
@@ -152,7 +160,7 @@ def create_bcr(table):
             "ha": "right",
             "size": 8
         },
-        title=f"{username}'s scrobbles by artists",
+        title=f"{username}'s scrobbles by {chart_type.lower()}",
         dpi=300,
         steps_per_period=25,
         period_length=250,
@@ -168,7 +176,7 @@ def create_bcr(table):
 def output(video, username, start_date, end_date):
 
     st.video(video) # display video in streamlit
-    st.download_button("Download", video, f"{username}_{start_date}_{end_date}.mp4") # download link
+    st.download_button("Download", video, f"{username}_{chart_type.lower()}_{start_date}_{end_date}.mp4") # download link
 
 def update_bar(current_stage, max_stage):
     percent_complete = current_stage / max_stage
@@ -198,21 +206,25 @@ if __name__ == "__main__":
         username = st.text_input("Enter Last.fm username")
 
         today = datetime.date.today()
-        yesterday = today - datetime.timedelta(days=1)
+        last_week = today - datetime.timedelta(days=7)
 
-        start_date, end_date = st.date_input("Date range", [yesterday, today], min_value=datetime.date(2002, 3, 20), max_value=today)
+        start_date, end_date = st.date_input("Date range", [last_week, today], min_value=datetime.date(2002, 3, 20), max_value=today)
+
+        chart_type = st.selectbox(
+            "Chart type",
+            ("Artists", "Albums", "Tracks"))
 
     # check dates after click on "Generate"
 
         if st.form_submit_button(label="Generate"):
-            
+
             progress_bar = st.progress(0) # initialize progress bar
 
             with st.spinner("Fetching data from Last.fm..."):
                 df = get_data(api_key, username, start_date, end_date)
 
             with st.spinner("Preparing data frame..."):
-                table = set_table(df)
+                table = set_table(df, chart_type)
                 update_bar(3, 5)
 
             with st.spinner("Optimizing data frame..."):
@@ -220,7 +232,7 @@ if __name__ == "__main__":
                 update_bar(4, 5)
             
             with st.spinner("Creating animation... (this may take a while)"):
-                st.session_state["video"] = create_bcr(table)
+                st.session_state["video"] = create_bcr(table, chart_type)
                 update_bar(5, 5)
 
             progress_bar.empty()
