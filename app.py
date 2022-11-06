@@ -28,7 +28,7 @@ def lastfm_get(api_key, username, page, uts_start, uts_end):
     response = requests.get(url, headers=headers, params=payload)
     return response
 
-@st.cache(show_spinner=False)
+@st.cache(show_spinner=False, suppress_st_warning=True)
 def get_data(api_key, username, start_date, end_date):
 
     # convert start and end dates to Unix timestamps
@@ -93,8 +93,6 @@ def set_table(df):
     df["date"] = pd.to_datetime(df["date.uts"],unit="s")
 
     # filter date frame
-    #mask = (df["date"] >= start_date) & (df["date"] <= end_date)
-    #df = df.loc[mask]
     df["date"] = df["date"].dt.date
 
     # get min and max dates
@@ -122,8 +120,8 @@ def set_table(df):
 
 def optimize_table(table):
 
-    # keep only top 15 columns per rows and set others to 0
-    table = table.mask(table.rank(axis=1, method='min', ascending=False).gt(15), 0)
+    # keep only top 10 columns per rows and set others to 0
+    table = table.mask(table.rank(axis=1, method='min', ascending=False).gt(10), 0)
 
     # drop all columns where all values are zero 
     table = table.loc[:, table.any()]
@@ -155,6 +153,9 @@ def create_bcr(table):
             "size": 8
         },
         title=f"{username}'s scrobbles by artists",
+        dpi=300,
+        steps_per_period=25,
+        period_length=250,
     )
 
     # generate the video file
@@ -199,37 +200,30 @@ if __name__ == "__main__":
         today = datetime.date.today()
         yesterday = today - datetime.timedelta(days=1)
 
-        start_date = st.date_input("Enter start date", yesterday)
-        end_date = st.date_input("Enter end date", today)
+        start_date, end_date = st.date_input("Date range", [yesterday, today], min_value=datetime.date(2002, 3, 20), max_value=today)
 
     # check dates after click on "Generate"
 
         if st.form_submit_button(label="Generate"):
+            
+            progress_bar = st.progress(0) # initialize progress bar
 
-            if start_date < end_date and start_date < today and end_date <= today:
+            with st.spinner("Fetching data from Last.fm..."):
+                df = get_data(api_key, username, start_date, end_date)
 
-                # start generating the animation if date requirements are met
-                progress_bar = st.progress(0) # initialize progress bar
+            with st.spinner("Preparing data frame..."):
+                table = set_table(df)
+                update_bar(3, 5)
 
-                with st.spinner("Fetching data from Last.fm..."):
-                    df = get_data(api_key, username, start_date, end_date)
+            with st.spinner("Optimizing data frame..."):
+                table = optimize_table(table)
+                update_bar(4, 5)
+            
+            with st.spinner("Creating animation... (this may take a while)"):
+                st.session_state["video"] = create_bcr(table)
+                update_bar(5, 5)
 
-                with st.spinner("Preparing data frame..."):
-                    table = set_table(df)
-                    update_bar(3, 5)
-
-                with st.spinner("Optimizing data frame..."):
-                    table = optimize_table(table)
-                    update_bar(4, 5)
-                
-                with st.spinner("Creating animation..."):
-                    st.session_state["video"] = create_bcr(table)
-                    update_bar(5, 5)
-
-                progress_bar.empty()
-
-            else:
-                st.error("Date Error", icon="🚨")
+            progress_bar.empty()
 
     if len(st.session_state["video"]) !=0:
         output(st.session_state["video"], username, start_date, end_date)
