@@ -218,24 +218,34 @@ if __name__ == "__main__":
 
         if st.form_submit_button(label="Generate"):
 
+            print("--- 🏁 start generating animation ---")
             progress_bar = st.progress(0) # initialize progress bar
 
-            with st.spinner("Fetching data from Last.fm..."):
+            with st.spinner("Fetching data from Last.fm..."):      
+                start_time = time.time()
                 df = get_data(api_key, username, start_date, end_date)
+                print("🕘 get_data: %s seconds" % (time.time() - start_time))
 
-            with st.spinner("Preparing data frame..."):
+            with st.spinner("Preparing data frame..."):    
+                start_time = time.time()
                 table = set_table(df, chart_type)
                 update_bar(3, 5)
+                print("🕙 set_table: %s seconds" % (time.time() - start_time))
 
-            with st.spinner("Optimizing data frame..."):
+            with st.spinner("Optimizing data frame..."):  
+                start_time = time.time()
                 table = optimize_table(table)
                 update_bar(4, 5)
+                print("🕚 optimize_table: %s seconds" % (time.time() - start_time))
             
             with st.spinner("Creating animation... (this may take a while)"):
+                start_time = time.time()
                 st.session_state["video"] = create_bcr(table, chart_type)
                 update_bar(5, 5)
+                print("🕛 create_bcr: %s seconds" % (time.time() - start_time))
 
             progress_bar.empty()
 
     if len(st.session_state["video"]) !=0:
+        print("--- ✔️ animation generated successfully---")
         output(st.session_state["video"], username, start_date, end_date)
