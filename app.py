@@ -97,8 +97,11 @@ def set_table(df, chart_type):
 
     df = df_normalized[["date.uts", "content"]]
 
-    # convert date format
-    df["date"] = pd.to_datetime(df["date.uts"],unit="s")
+    # convert date format and make non-dates into NaT
+    df["date"] = pd.to_datetime(df["date.uts"],unit="s", errors="coerce")
+
+    # remove NaT (to skip any currently scrobbling track)
+    df = df.dropna(subset=["date"])
 
     # filter date frame
     df["date"] = df["date"].dt.date
