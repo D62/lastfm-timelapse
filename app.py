@@ -2,6 +2,8 @@ import bar_chart_race as bcr
 import base64
 import datetime
 import json
+import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
 import requests
 import pandas as pd
 import streamlit as st
@@ -24,11 +26,11 @@ def lastfm_get(api_key, username, page, uts_start, uts_end):
     # define headers and URL
     headers = {"user-agent": "test"}
     url = "https://ws.audioscrobbler.com/2.0/"
-
     response = requests.get(url, headers=headers, params=payload)
     return response
 
 @st.cache(show_spinner=False, suppress_st_warning=True)
+
 def get_data(api_key, username, start_date, end_date):
 
     # convert start and end dates to Unix timestamps
@@ -53,6 +55,7 @@ def get_data(api_key, username, start_date, end_date):
         # check number of scrobbles and stop if >15000
         limit = 15000
         total = int(response.json()["recenttracks"]["@attr"]["total"])
+
         if total > limit:
             progress_bar.empty()
             st.error(f"Too many scrobbles to process ({total}/{limit})", icon="🚨")
@@ -62,7 +65,7 @@ def get_data(api_key, username, start_date, end_date):
         page = int(response.json()["recenttracks"]["@attr"]["page"])
         total_pages = int(response.json()["recenttracks"]["@attr"]["totalPages"])
 
-        # append response
+         # append response
         responses.append(response)
 
         # if it is not a cached result, sleep
@@ -134,7 +137,7 @@ def optimize_table(table):
     # keep only top 10 columns per rows and set others to 0
     table = table.mask(table.rank(axis=1, method='min', ascending=False).gt(10), 0)
 
-    # drop all columns where all values are zero 
+    # drop all columns where all values are zero
     table = table.loc[:, table.any()]
 
     # replace zeros with last non-zero value for each column on multi-index dataframe
@@ -142,29 +145,57 @@ def optimize_table(table):
 
     return table
 
-def create_bcr(table, chart_type):
+def create_bcr(title, table):
+
+    plt.rcParams["font.family"] = "Helvetica, Arial"
+
+    # initiate fig
+    fig, ax = plt.subplots(figsize=(8,4.5), facecolor="white", dpi= 300)
+    ax.margins(0, 0.01)
+
+    # fix the size of the plot to the max value of the top item
+    ax.set_xlim(0, table.max(numeric_only=True).max())
+    
+    ax.grid(which="major", axis="x", linestyle="-", linewidth=0.2, color="dimgrey")
+
+    # ticks parameters
+    ax.tick_params(axis="x", colors="dimgrey", labelsize=8, length=0)
+    ax.tick_params(axis="y", colors="dimgrey", labelsize=8, length=0)
+    ax.xaxis.set_ticks_position("top")
+
+    # set borders colors
+    for pos in ["top", "bottom", "right", "left"]:
+        if pos == "top":
+            ax.spines[pos].set_edgecolor("dimgrey")
+        else:
+            ax.spines[pos].set_edgecolor("white")
+            ax.xaxis.set_major_formatter(ticker.StrMethodFormatter("{x:,.0f}"))
+
+    # set title
+    ax.set_title(title, fontsize=12, color="dimgrey", pad=20)
 
     # bar chart race parameters
     html_str = bcr.bar_chart_race(
         table,
         n_bars=10,
-        fixed_order=False,
+        fig=fig,
         fixed_max=True,
         period_label={
             "x": .99,
             "y": .25,
             "ha": "right",
-            "va": "center"
+            "va": "center",
+            "size": 36,
+            "color": "dimgrey"
         },
         period_summary_func=lambda v, r:{
             "x": .99,
-            "y": .18,
+            "y": .16,
             "s": f"Total: {v.nlargest(6).sum():,.0f}",
             "ha": "right",
-            "size": 8
+            "size": 18,
+            "color": "dimgrey"
         },
-        title=f"{username}'s scrobbles by {chart_type.lower()}",
-        dpi=300,
         steps_per_period=25,
         period_length=250,
     )
@@ -205,22 +236,21 @@ if __name__ == "__main__":
 
     # input form
     with st.form(key="Form"):
-
         username = st.text_input("Enter Last.fm username")
-
         today = datetime.date.today()
         last_week = today - datetime.timedelta(days=7)
-
-        start_date, end_date = st.date_input("Date range", [last_week, today], min_value=datetime.date(2002, 3, 20), max_value=today)
-
+        start_date, end_date = st.date_input(
+            "Date range",
+            [last_week, today],
+            min_value=datetime.date(2002, 3, 20),
+            max_value=today)
         chart_type = st.selectbox(
             "Chart type",
             ("Artists", "Albums", "Tracks"))
 
-    # check dates after click on "Generate"
+    # launch functions after click on "Generate"
 
         if st.form_submit_button(label="Generate"):
-
             print("--- 🏁 start generating animation ---")
             progress_bar = st.progress(0) # initialize progress bar
 
@@ -240,10 +270,11 @@ if __name__ == "__main__":
                 table = optimize_table(table)
                 update_bar(4, 5)
                 print("🕚 optimize_table: %s seconds" % (time.time() - start_time))
-            
+
             with st.spinner("Creating animation... (this may take a while)"):
                 start_time = time.time()
-                st.session_state["video"] = create_bcr(table, chart_type)
+                title = f"{username}'s scrobbles by {chart_type.lower()}"
+                st.session_state["video"] = create_bcr(title, table)
                 update_bar(5, 5)
                 print("🕛 create_bcr: %s seconds" % (time.time() - start_time))
 
