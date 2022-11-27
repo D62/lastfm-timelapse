@@ -3,7 +3,6 @@ import base64
 import datetime
 import json
 import matplotlib.pyplot as plt
-import matplotlib.ticker as ticker
 import requests
 import pandas as pd
 import streamlit as st
@@ -91,13 +90,24 @@ def set_table(df, chart_type):
         errors="ignore",
     )
 
+    exp_length = 30
+    df_normalized["artist.#text"] = df_normalized["artist.#text"].apply(lambda x: " ".join(x[:exp_length].split(" ")[:-1]) + "..." if len(x) > exp_length else x)
+
     if chart_type == "Artists":
+        max_length = max(df_normalized[["artist.#text"]].astype("str").applymap(lambda x: len(x)).max())
         df_normalized["content"] = df_normalized["artist.#text"]
     elif chart_type == "Albums":
+        max_length = max(df_normalized[["artist.#text", "album.#text"]].astype("str").applymap(lambda x: len(x)).max())
+        df_normalized["album.#text"] = df_normalized["album.#text"].apply(lambda x: " ".join(x[:exp_length].split(" ")[:-1]) + "..." if len(x) > exp_length else x)
         df_normalized["content"] = df_normalized[["artist.#text", "album.#text"]].agg("\n".join, axis=1)
     elif chart_type == "Tracks":
+        max_length = max(df_normalized[["artist.#text", "name"]].astype("str").applymap(lambda x: len(x)).max())
+        df_normalized["name"] = df_normalized["name"].apply(lambda x: " ".join(x[:exp_length].split(" ")[:-1]) + "..." if len(x) > exp_length else x)
         df_normalized["content"] = df_normalized[["artist.#text", "name"]].agg("\n".join, axis=1)
 
+    if max_length>exp_length:
+        max_length = exp_length
+    print(max_length)
     df = df_normalized[["date.uts", "content"]]
 
     # convert date format and make non-dates into NaT
@@ -130,7 +140,7 @@ def set_table(df, chart_type):
     # cumulate daily scrobbles
     table = table.cumsum(axis = 0)
 
-    return table
+    return table, max_length
 
 def optimize_table(table):
 
@@ -145,34 +155,32 @@ def optimize_table(table):
 
     return table
 
-def create_bcr(title, table):
+def create_bcr(title, max_length, table):
 
     plt.rcParams["font.family"] = "Helvetica, Arial"
 
     # initiate fig
-    fig, ax = plt.subplots(figsize=(8,4.5), facecolor="white", dpi= 300)
+    max_length = max_length / 110
+    fig, ax = plt.subplots(figsize=(8,4.5), facecolor="white", dpi= 250)
+    fig.subplots_adjust(left=max_length, bottom=-0.05, right=0.96, top=0.9)
     ax.margins(0, 0.01)
 
     # fix the size of the plot to the max value of the top item
-    ax.set_xlim(0, table.max(numeric_only=True).max())
+    ax.set_xlim(0, table.max(numeric_only=True).max()+0.5)
     
     ax.grid(which="major", axis="x", linestyle="-", linewidth=0.2, color="dimgrey")
 
     # ticks parameters
-    ax.tick_params(axis="x", colors="dimgrey", labelsize=8, length=0)
-    ax.tick_params(axis="y", colors="dimgrey", labelsize=8, length=0)
+    ax.tick_params(axis="x", colors="dimgrey", labelsize=9, length=0)
+    ax.tick_params(axis="y", colors="dimgrey", labelsize=9, length=0, direction="out")
     ax.xaxis.set_ticks_position("top")
 
     # set borders colors
     for pos in ["top", "bottom", "right", "left"]:
-        if pos == "top":
-            ax.spines[pos].set_edgecolor("dimgrey")
-        else:
-            ax.spines[pos].set_edgecolor("white")
-            ax.xaxis.set_major_formatter(ticker.StrMethodFormatter("{x:,.0f}"))
+        ax.spines[pos].set_edgecolor("white")
 
     # set title
-    ax.set_title(title, fontsize=12, color="dimgrey", pad=20)
+    ax.set_title(title, fontsize=12, color="dimgrey")
 
     # bar chart race parameters
     html_str = bcr.bar_chart_race(
@@ -182,21 +190,25 @@ def create_bcr(title, table):
         fixed_max=True,
         period_label={
             "x": .99,
-            "y": .25,
+            "y": .20,
             "ha": "right",
             "va": "center",
             "size": 36,
-            "color": "dimgrey"
+            "color": "#ccc",
+            "family": "Tahoma",
+            "weight": "bold"
         },
         period_summary_func=lambda v, r:{
             "x": .99,
-            "y": .16,
+            "y": .10,
             "s": f"Total: {v.nlargest(6).sum():,.0f}",
             "ha": "right",
             "size": 18,
-            "color": "dimgrey"
+            "color": "#ccc",
+            "family": "Tahoma",
+            "weight": "bold"
         },
-        steps_per_period=25,
+        steps_per_period=15,
         period_length=250,
     )
 
@@ -261,7 +273,7 @@ if __name__ == "__main__":
 
             with st.spinner("Preparing data frame..."):    
                 start_time = time.time()
-                table = set_table(df, chart_type)
+                table, max_length = set_table(df, chart_type)
                 update_bar(3, 5)
                 print("🕙 set_table: %s seconds" % (time.time() - start_time))
 
@@ -274,7 +286,7 @@ if __name__ == "__main__":
             with st.spinner("Creating animation... (this may take a while)"):
                 start_time = time.time()
                 title = f"{username}'s scrobbles by {chart_type.lower()}"
-                st.session_state["video"] = create_bcr(title, table)
+                st.session_state["video"] = create_bcr(title, max_length, table)
                 update_bar(5, 5)
                 print("🕛 create_bcr: %s seconds" % (time.time() - start_time))
 
