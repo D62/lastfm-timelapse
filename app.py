@@ -7,6 +7,7 @@ import requests
 import pandas as pd
 import streamlit as st
 import time
+from matplotlib.ticker import StrMethodFormatter
 
 def lastfm_get(api_key, username, page, uts_start, uts_end):
 
@@ -176,6 +177,7 @@ def create_bcr(title, max_length, table):
     ax.tick_params(axis="x", colors="dimgrey", labelsize=9, length=0)
     ax.tick_params(axis="y", colors="dimgrey", labelsize=9, length=0, direction="out")
     ax.xaxis.set_ticks_position("top")
+    ax.xaxis.set_major_formatter(StrMethodFormatter('{x:,.0f}'))
 
     # set borders colors
     for pos in ["top", "bottom", "right", "left"]:
