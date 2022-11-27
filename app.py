@@ -90,9 +90,11 @@ def set_table(df, chart_type):
         errors="ignore",
     )
 
+    # set max length for artist, album and track names
     exp_length = 30
     df_normalized["artist.#text"] = df_normalized["artist.#text"].apply(lambda x: " ".join(x[:exp_length].split(" ")[:-1]) + "..." if len(x) > exp_length else x)
 
+    # merge into one column artist, album and track names
     if chart_type == "Artists":
         max_length = max(df_normalized[["artist.#text"]].astype("str").applymap(lambda x: len(x)).max())
         df_normalized["content"] = df_normalized["artist.#text"]
@@ -145,7 +147,7 @@ def set_table(df, chart_type):
 def optimize_table(table):
 
     # keep only top 10 columns per rows and set others to 0
-    table = table.mask(table.rank(axis=1, method='min', ascending=False).gt(10), 0)
+    table = table.mask(table.rank(axis=1, method="min", ascending=False).gt(10), 0)
 
     # drop all columns where all values are zero
     table = table.loc[:, table.any()]
