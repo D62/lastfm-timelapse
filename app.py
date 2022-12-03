@@ -82,7 +82,7 @@ def get_data(api_key, username, start_date, end_date):
     df = [json.loads(r.content.decode("utf-8")) for r in responses]
     return df
 
-def set_table(df, chart_type):
+def set_table(df, chart_type, exp_length):
 
     # normalize data frame
     df_normalized = pd.json_normalize(
@@ -91,8 +91,6 @@ def set_table(df, chart_type):
         errors="ignore",
     )
 
-    # set max length for artist, album and track names
-    exp_length = 30
     df_normalized["artist.#text"] = df_normalized["artist.#text"].apply(lambda x: " ".join(x[:exp_length].split(" ")[:-1]) + "..." if len(x) > exp_length else x)
 
     # merge into one column artist, album and track names
@@ -145,19 +143,6 @@ def set_table(df, chart_type):
 
     return table, max_length
 
-def optimize_table(table):
-
-    # keep only top 10 columns per rows and set others to 0
-    table = table.mask(table.rank(axis=1, method="min", ascending=False).gt(10), 0)
-
-    # drop all columns where all values are zero
-    table = table.loc[:, table.any()]
-
-    # replace zeros with last non-zero value for each column on multi-index dataframe
-    table = table.mask(table == 0).ffill(downcast="infer").fillna(0).astype(int)
-
-    return table
-
 def create_bcr(title, max_length, table):
 
     plt.rcParams["font.family"] = "Helvetica, Arial"
@@ -205,7 +190,7 @@ def create_bcr(title, max_length, table):
         period_summary_func=lambda v, r:{
             "x": .99,
             "y": .10,
-            "s": f"Total: {v.nlargest(6).sum():,.0f}",
+            "s": f"Total: {v.sum():,.0f}",
             "ha": "right",
             "size": 18,
             "color": "#ccc",
@@ -244,6 +229,9 @@ if __name__ == "__main__":
         }
     )
     st.title(title)
+    
+    # set max length for artist, album and track names
+    exp_length = 25
 
     api_key = st.secrets["api_key"]
 
@@ -277,21 +265,15 @@ if __name__ == "__main__":
 
             with st.spinner("Preparing data frame..."):    
                 start_time = time.time()
-                table, max_length = set_table(df, chart_type)
-                update_bar(3, 5)
+                table, max_length = set_table(df, chart_type, exp_length)
+                update_bar(3, 4)
                 print("🕙 set_table: %s seconds" % (time.time() - start_time))
-
-            with st.spinner("Optimizing data frame..."):  
-                start_time = time.time()
-                table = optimize_table(table)
-                update_bar(4, 5)
-                print("🕚 optimize_table: %s seconds" % (time.time() - start_time))
 
             with st.spinner("Creating animation... (this may take a while)"):
                 start_time = time.time()
                 title = f"{username}'s scrobbles by {chart_type.lower()}"
                 st.session_state["video"] = create_bcr(title, max_length, table)
-                update_bar(5, 5)
+                update_bar(4, 4)
                 print("🕛 create_bcr: %s seconds" % (time.time() - start_time))
 
             progress_bar.empty()
