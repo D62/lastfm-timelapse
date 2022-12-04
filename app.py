@@ -56,7 +56,6 @@ def get_data(api_key, username, start_date, end_date):
         # check number of scrobbles and stop if >15000
         limit = 15000
         total = int(response.json()["recenttracks"]["@attr"]["total"])
-
         if total > limit:
             progress_bar.empty()
             st.error(f"Too many scrobbles to process ({total}/{limit})", icon="🚨")
@@ -80,11 +79,12 @@ def get_data(api_key, username, start_date, end_date):
         # increment the page number
         page += 1
 
+    # create data frame
     df = [json.loads(r.content.decode("utf-8")) for r in responses]
     return df
 
 
-def set_table(df, chart_type, exp_length):
+def set_table(df, chart_type, max_length):
 
     # normalize data frame
     df_normalized = pd.json_normalize(
@@ -93,55 +93,36 @@ def set_table(df, chart_type, exp_length):
         errors="ignore",
     )
 
+    # reduce artist names to max length
     df_normalized["artist.#text"] = df_normalized["artist.#text"].apply(
-        lambda x: " ".join(x[:exp_length].split(" ")[:-1]) + "..."
-        if len(x) > exp_length
+        lambda x: " ".join(x[:max_length].split(" ")[:-1]) + "..."
+        if len(x) > max_length
         else x
     )
 
     # merge into one column artist, album and track names
+    # and reduce album/track names to max length
     if chart_type == "Artists":
-        max_length = max(
-            df_normalized[["artist.#text"]]
-            .astype("str")
-            .applymap(lambda x: len(x))
-            .max()
-        )
         df_normalized["content"] = df_normalized["artist.#text"]
     elif chart_type == "Albums":
-        max_length = max(
-            df_normalized[["artist.#text", "album.#text"]]
-            .astype("str")
-            .applymap(lambda x: len(x))
-            .max()
-        )
         df_normalized["album.#text"] = df_normalized["album.#text"].apply(
-            lambda x: " ".join(x[:exp_length].split(" ")[:-1]) + "..."
-            if len(x) > exp_length
+            lambda x: " ".join(x[:max_length].split(" ")[:-1]) + "..."
+            if len(x) > max_length
             else x
         )
         df_normalized["content"] = df_normalized[["artist.#text", "album.#text"]].agg(
             "\n".join, axis=1
         )
     elif chart_type == "Tracks":
-        max_length = max(
-            df_normalized[["artist.#text", "name"]]
-            .astype("str")
-            .applymap(lambda x: len(x))
-            .max()
-        )
         df_normalized["name"] = df_normalized["name"].apply(
-            lambda x: " ".join(x[:exp_length].split(" ")[:-1]) + "..."
-            if len(x) > exp_length
+            lambda x: " ".join(x[:max_length].split(" ")[:-1]) + "..."
+            if len(x) > max_length
             else x
         )
         df_normalized["content"] = df_normalized[["artist.#text", "name"]].agg(
             "\n".join, axis=1
         )
 
-    if max_length > exp_length:
-        max_length = exp_length
-    print(max_length)
     df = df_normalized[["date.uts", "content"]]
 
     # convert date format and make non-dates into NaT
@@ -182,7 +163,7 @@ def create_bcr(title, max_length, table):
     plt.rcParams["font.family"] = "Helvetica, Arial"
 
     # initiate fig
-    max_length = max_length / 110
+    max_length = max_length / 115
     fig, ax = plt.subplots(figsize=(8, 4.5), facecolor="white", dpi=250)
     fig.subplots_adjust(left=max_length, bottom=-0.05, right=0.96, top=0.9)
     ax.margins(0, 0.01)
@@ -243,21 +224,6 @@ def create_bcr(title, max_length, table):
     return video
 
 
-def output(video, username, start_date, end_date):
-
-    st.video(video)  # display video in streamlit
-    st.download_button(
-        "Download",
-        video,
-        f"{username}_{chart_type.lower()}_{start_date}_{end_date}.mp4",
-    )  # download link
-
-
-def update_bar(current_stage, max_stage):
-    percent_complete = current_stage / max_stage
-    progress_bar.progress(percent_complete)
-
-
 if __name__ == "__main__":
 
     # Streamlit page config & title
@@ -270,7 +236,7 @@ if __name__ == "__main__":
     st.title(title)
 
     # set max length for artist, album and track names
-    exp_length = 25
+    max_length = 25
 
     api_key = st.secrets["api_key"]
 
@@ -299,23 +265,29 @@ if __name__ == "__main__":
             with st.spinner("Fetching data from Last.fm..."):
                 start_time = time.time()
                 df = get_data(api_key, username, start_date, end_date)
+                progress_bar.progress(2 / 4)
                 print("🕘 get_data: %s seconds" % (time.time() - start_time))
 
             with st.spinner("Preparing data frame..."):
                 start_time = time.time()
-                table, max_length = set_table(df, chart_type, exp_length)
-                update_bar(3, 4)
+                table, max_length = set_table(df, chart_type, max_length)
+                progress_bar.progress(3 / 4)
                 print("🕙 set_table: %s seconds" % (time.time() - start_time))
 
             with st.spinner("Creating animation... (this may take a while)"):
                 start_time = time.time()
                 title = f"{username}'s scrobbles by {chart_type.lower()}"
                 st.session_state["video"] = create_bcr(title, max_length, table)
-                update_bar(4, 4)
+                progress_bar.progress(4 / 4)
                 print("🕛 create_bcr: %s seconds" % (time.time() - start_time))
 
             progress_bar.empty()
 
     if len(st.session_state["video"]) != 0:
         print("--- ✔️ animation generated successfully---")
-        output(st.session_state["video"], username, start_date, end_date)
+        st.video(st.session_state["video"])  # display video in streamlit
+        st.download_button(
+            "Download",
+            st.session_state["video"],
+            f"{username}_{chart_type.lower()}_{start_date}_{end_date}.mp4",
+        )  # download link
