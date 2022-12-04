@@ -9,6 +9,7 @@ import streamlit as st
 import time
 from matplotlib.ticker import StrMethodFormatter
 
+
 def lastfm_get(api_key, username, page, uts_start, uts_end):
 
     # add API key and format to the payload
@@ -20,7 +21,7 @@ def lastfm_get(api_key, username, page, uts_start, uts_end):
         "from": uts_start,
         "to": uts_end,
         "limit": 200,
-        "page": page
+        "page": page,
     }
 
     # define headers and URL
@@ -29,8 +30,8 @@ def lastfm_get(api_key, username, page, uts_start, uts_end):
     response = requests.get(url, headers=headers, params=payload)
     return response
 
-@st.cache(show_spinner=False, suppress_st_warning=True)
 
+@st.cache(show_spinner=False, suppress_st_warning=True)
 def get_data(api_key, username, start_date, end_date):
 
     # convert start and end dates to Unix timestamps
@@ -39,7 +40,7 @@ def get_data(api_key, username, start_date, end_date):
 
     responses = []
     page = 1
-    total_pages = 99999 # dummy number so the loop starts
+    total_pages = 99999  # dummy number so the loop starts
 
     while page <= total_pages:
 
@@ -65,7 +66,7 @@ def get_data(api_key, username, start_date, end_date):
         page = int(response.json()["recenttracks"]["@attr"]["page"])
         total_pages = int(response.json()["recenttracks"]["@attr"]["totalPages"])
 
-         # append response
+        # append response
         responses.append(response)
 
         # if it is not a cached result, sleep
@@ -82,6 +83,7 @@ def get_data(api_key, username, start_date, end_date):
     df = [json.loads(r.content.decode("utf-8")) for r in responses]
     return df
 
+
 def set_table(df, chart_type, exp_length):
 
     # normalize data frame
@@ -91,28 +93,59 @@ def set_table(df, chart_type, exp_length):
         errors="ignore",
     )
 
-    df_normalized["artist.#text"] = df_normalized["artist.#text"].apply(lambda x: " ".join(x[:exp_length].split(" ")[:-1]) + "..." if len(x) > exp_length else x)
+    df_normalized["artist.#text"] = df_normalized["artist.#text"].apply(
+        lambda x: " ".join(x[:exp_length].split(" ")[:-1]) + "..."
+        if len(x) > exp_length
+        else x
+    )
 
     # merge into one column artist, album and track names
     if chart_type == "Artists":
-        max_length = max(df_normalized[["artist.#text"]].astype("str").applymap(lambda x: len(x)).max())
+        max_length = max(
+            df_normalized[["artist.#text"]]
+            .astype("str")
+            .applymap(lambda x: len(x))
+            .max()
+        )
         df_normalized["content"] = df_normalized["artist.#text"]
     elif chart_type == "Albums":
-        max_length = max(df_normalized[["artist.#text", "album.#text"]].astype("str").applymap(lambda x: len(x)).max())
-        df_normalized["album.#text"] = df_normalized["album.#text"].apply(lambda x: " ".join(x[:exp_length].split(" ")[:-1]) + "..." if len(x) > exp_length else x)
-        df_normalized["content"] = df_normalized[["artist.#text", "album.#text"]].agg("\n".join, axis=1)
+        max_length = max(
+            df_normalized[["artist.#text", "album.#text"]]
+            .astype("str")
+            .applymap(lambda x: len(x))
+            .max()
+        )
+        df_normalized["album.#text"] = df_normalized["album.#text"].apply(
+            lambda x: " ".join(x[:exp_length].split(" ")[:-1]) + "..."
+            if len(x) > exp_length
+            else x
+        )
+        df_normalized["content"] = df_normalized[["artist.#text", "album.#text"]].agg(
+            "\n".join, axis=1
+        )
     elif chart_type == "Tracks":
-        max_length = max(df_normalized[["artist.#text", "name"]].astype("str").applymap(lambda x: len(x)).max())
-        df_normalized["name"] = df_normalized["name"].apply(lambda x: " ".join(x[:exp_length].split(" ")[:-1]) + "..." if len(x) > exp_length else x)
-        df_normalized["content"] = df_normalized[["artist.#text", "name"]].agg("\n".join, axis=1)
+        max_length = max(
+            df_normalized[["artist.#text", "name"]]
+            .astype("str")
+            .applymap(lambda x: len(x))
+            .max()
+        )
+        df_normalized["name"] = df_normalized["name"].apply(
+            lambda x: " ".join(x[:exp_length].split(" ")[:-1]) + "..."
+            if len(x) > exp_length
+            else x
+        )
+        df_normalized["content"] = df_normalized[["artist.#text", "name"]].agg(
+            "\n".join, axis=1
+        )
 
-    if max_length>exp_length:
+    if max_length > exp_length:
         max_length = exp_length
     print(max_length)
     df = df_normalized[["date.uts", "content"]]
 
     # convert date format and make non-dates into NaT
-    df["date"] = pd.to_datetime(df["date.uts"],unit="s", errors="coerce")
+    df["date"] = pd.to_datetime(df["date.uts"], unit="s", errors="coerce")
 
     # remove NaT (to skip any currently scrobbling track)
     df = df.dropna(subset=["date"])
@@ -126,12 +159,12 @@ def set_table(df, chart_type, exp_length):
 
     # pivot data frame
     table = pd.pivot_table(
-        df, 
+        df,
         values="date.uts",
         index=["date"],
         columns=["content"],
         aggfunc="count",
-        fill_value=0
+        fill_value=0,
     )
 
     # fill empty dates
@@ -139,9 +172,10 @@ def set_table(df, chart_type, exp_length):
     table = table.reindex(idx, fill_value=0)
 
     # cumulate daily scrobbles
-    table = table.cumsum(axis = 0)
+    table = table.cumsum(axis=0)
 
     return table, max_length
+
 
 def create_bcr(title, max_length, table):
 
@@ -149,20 +183,20 @@ def create_bcr(title, max_length, table):
 
     # initiate fig
     max_length = max_length / 110
-    fig, ax = plt.subplots(figsize=(8,4.5), facecolor="white", dpi= 250)
+    fig, ax = plt.subplots(figsize=(8, 4.5), facecolor="white", dpi=250)
     fig.subplots_adjust(left=max_length, bottom=-0.05, right=0.96, top=0.9)
     ax.margins(0, 0.01)
 
     # fix the size of the plot to the max value of the top item
-    ax.set_xlim(0, table.max(numeric_only=True).max()+0.5)
-    
+    ax.set_xlim(0, table.max(numeric_only=True).max() + 0.5)
+
     ax.grid(which="major", axis="x", linestyle="-", linewidth=0.2, color="dimgrey")
 
     # ticks parameters
     ax.tick_params(axis="x", colors="dimgrey", labelsize=9, length=0)
     ax.tick_params(axis="y", colors="dimgrey", labelsize=9, length=0, direction="out")
     ax.xaxis.set_ticks_position("top")
-    ax.xaxis.set_major_formatter(StrMethodFormatter('{x:,.0f}'))
+    ax.xaxis.set_major_formatter(StrMethodFormatter("{x:,.0f}"))
 
     # set borders colors
     for pos in ["top", "bottom", "right", "left"]:
@@ -178,44 +212,51 @@ def create_bcr(title, max_length, table):
         fig=fig,
         fixed_max=True,
         period_label={
-            "x": .99,
-            "y": .20,
+            "x": 0.99,
+            "y": 0.20,
             "ha": "right",
             "va": "center",
             "size": 36,
             "color": "#ccc",
             "family": "Tahoma",
-            "weight": "bold"
+            "weight": "bold",
         },
-        period_summary_func=lambda v, r:{
-            "x": .99,
-            "y": .10,
+        period_summary_func=lambda v, r: {
+            "x": 0.99,
+            "y": 0.10,
             "s": f"Total: {v.sum():,.0f}",
             "ha": "right",
             "size": 18,
             "color": "#ccc",
             "family": "Tahoma",
-            "weight": "bold"
+            "weight": "bold",
         },
         steps_per_period=15,
         period_length=250,
     )
 
     # generate the video file
-    start = html_str.find('base64,')+len('base64,')
+    start = html_str.find("base64,") + len("base64,")
     end = html_str.find('">')
     video = base64.b64decode(html_str[start:end])
 
     return video
 
+
 def output(video, username, start_date, end_date):
 
-    st.video(video) # display video in streamlit
-    st.download_button("Download", video, f"{username}_{chart_type.lower()}_{start_date}_{end_date}.mp4") # download link
+    st.video(video)  # display video in streamlit
+    st.download_button(
+        "Download",
+        video,
+        f"{username}_{chart_type.lower()}_{start_date}_{end_date}.mp4",
+    )  # download link
+
 
 def update_bar(current_stage, max_stage):
     percent_complete = current_stage / max_stage
     progress_bar.progress(percent_complete)
+
 
 if __name__ == "__main__":
 
@@ -224,12 +265,10 @@ if __name__ == "__main__":
     st.set_page_config(
         page_title=title,
         page_icon=":headphones:",
-        menu_items={
-            "About": "https://github.com/D62/lastfm-timelapse"
-        }
+        menu_items={"About": "https://github.com/D62/lastfm-timelapse"},
     )
     st.title(title)
-    
+
     # set max length for artist, album and track names
     exp_length = 25
 
@@ -247,23 +286,22 @@ if __name__ == "__main__":
             "Date range",
             [last_week, today],
             min_value=datetime.date(2002, 3, 20),
-            max_value=today)
-        chart_type = st.selectbox(
-            "Chart type",
-            ("Artists", "Albums", "Tracks"))
+            max_value=today,
+        )
+        chart_type = st.selectbox("Chart type", ("Artists", "Albums", "Tracks"))
 
-    # launch functions after click on "Generate"
+        # launch functions after click on "Generate"
 
         if st.form_submit_button(label="Generate"):
             print("--- 🏁 start generating animation ---")
-            progress_bar = st.progress(0) # initialize progress bar
+            progress_bar = st.progress(0)  # initialize progress bar
 
-            with st.spinner("Fetching data from Last.fm..."):      
+            with st.spinner("Fetching data from Last.fm..."):
                 start_time = time.time()
                 df = get_data(api_key, username, start_date, end_date)
                 print("🕘 get_data: %s seconds" % (time.time() - start_time))
 
-            with st.spinner("Preparing data frame..."):    
+            with st.spinner("Preparing data frame..."):
                 start_time = time.time()
                 table, max_length = set_table(df, chart_type, exp_length)
                 update_bar(3, 4)
@@ -278,6 +316,6 @@ if __name__ == "__main__":
 
             progress_bar.empty()
 
-    if len(st.session_state["video"]) !=0:
+    if len(st.session_state["video"]) != 0:
         print("--- ✔️ animation generated successfully---")
         output(st.session_state["video"], username, start_date, end_date)
